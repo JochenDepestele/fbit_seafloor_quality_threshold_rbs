@@ -1,6 +1,6 @@
 ---
-title: "Exploration of longevity trait for Type 2 data"
-subtitle: "Cumulative Biomass Distribution by longevity classes"
+title: "Cumulative Biomass Distribution by longevity classes"
+subtitle: "Exploration for Type 2 data"
 author: "Jochen Depestele"
 date: today
 date-format: "D MMMM YYYY"
@@ -42,10 +42,16 @@ library(dplyr)
 library(ggplot2)
 library(kableExtra)
 
+```
+
+```{r Functions, echo=T,include=T, tidy=TRUE}
+
 # Functions ----
 logit = function(p){log(p/(1-p))}
 
-f_coeflmod <- function(L1, L1_3, L3_10, L10){ # Estimate slope and intercept of cumulative binomial distribution functions of the relative biomass distribution across longevity classes
+# Estimate slope and intercept of cumulative binomial distribution functions of 
+# the relative biomass distribution across longevity classes
+f_coeflmod <- function(L1, L1_3, L3_10, L10){ 
   L_vct=c(L1, L1_3, L3_10, L10)
   dat <- data.frame(Cumb=cumsum(L_vct[c(1:3)])/sum(L_vct),
                     ll=c(log(1),log(3),log(10)))
@@ -55,7 +61,9 @@ f_coeflmod <- function(L1, L1_3, L3_10, L10){ # Estimate slope and intercept of 
   return(c(lintercept=lintercept,
            lslope=lslope))
 }
-f_predlong <- function(lintercept,lslope,prob=0.5){ # Predict the longevity for a relative cumulative biomass probabilitty
+
+# Predict the longevity for a relative cumulative biomass probability
+f_predlong <- function(lintercept,lslope,prob=0.5){ 
   as.numeric(exp(logit(prob)-lintercept/lslope)) # prob=0.5 results in medlong
 }
 
@@ -86,25 +94,29 @@ Lclasses <- c("L1", "L3", "L10", "L10plus")
 
 ```
 
-```{r Biomass-at-longevity by station}
+```{r Biomass-at-longevity by station, echo=T,include=T, tidy=TRUE}
 ## PRE-PROCESS longevity biomass data ####
 ## Biomass-at-longevity-class per station ----
 # For each species: estimate its biomass per longevity class
-B_dt[, (Lclasses) := lapply(.SD, function(x) x * as.numeric(biomass_g_per_sqm)), .SDcols = Lclasses]
+B_dt[, 
+     (Lclasses) := lapply(.SD, function(x) x * as.numeric(biomass_g_per_sqm)), 
+     .SDcols = Lclasses]
 # Summarize over species to estimate station-specific biomass-at-longevity-class
 B_dt <- B_dt[,
              lapply(.SD, sum, na.rm=T),
              by=.(.id, station_name, replicate, year, month),
-             .SDcols = Lclasses] # aphiaid is excluded to summarize across all species
-# selcols <- c(".id","station_name","replicate","year") # Year is required to identify unique samples
+             .SDcols = Lclasses] # exclude aphiaid to summarize over all species
+# selcols <- c(".id","station_name","replicate","year")
 # unique(B_dt[,..selcols])
 # nrow(B_dt[rowSums(B_dt[,..Lclasses])==0]) # 4 records
-B_dt <- B_dt[rowSums(B_dt[,..Lclasses])!=0] # The biomass in longevity classes cannot be zero
-if(all(rowSums(B_dt[,..Lclasses])==0)){"Check that the total biomass in any sample is not zero"}
+# The biomass in longevity classes cannot be zero
+B_dt <- B_dt[rowSums(B_dt[,..Lclasses])!=0] 
+if(all(rowSums(B_dt[,..Lclasses])==0)){
+  "Check that the total biomass in any sample is not zero"}
 
 ```
 
-```{r slope and intercept of binomial distribution function}
+```{r slope and intercept of binomial distribution function, echo=T,include=T, tidy=TRUE}
 ## SLOPE AND INTERCEPT OF BINOMIAL DISTRIBUTION FUNCTION ####
 B_dt[,c("lintercept", "lslope") := 
        transpose(.(do.call(f_coeflmod, setNames(.SD, names(Lclasses))))),
@@ -113,7 +125,8 @@ B_dt[,c("lintercept", "lslope") :=
 
 B_dt[,medlong := f_predlong(lintercept, lslope, prob=0.5)]
 B_dt[,Q90long := f_predlong(lintercept, lslope, prob=0.9)]
-B_dt[.id %in% "BoBIC_GulfofCadizsand_btrawling" & station_name == "arsa2015_4_"]$station_name <- "arsa2015_4"
+B_dt[.id %in% "BoBIC_GulfofCadizsand_btrawling" & 
+       station_name == "arsa2015_4_"]$station_name <- "arsa2015_4"
 
 ```
 
