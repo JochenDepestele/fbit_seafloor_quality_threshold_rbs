@@ -1,0 +1,269 @@
+---
+title: "Exploration of longevity trait for Type 2 data"
+subtitle: "Cumulative Biomass Distribution by longevity classes"
+author: "Jochen Depestele"
+date: today
+date-format: "D MMMM YYYY"
+format:
+  pdf:
+    number-sections: true
+    tbl-cap-location: top
+    include-in-header:
+      text: |
+        \usepackage{longtable}
+execute: 
+  warning: false
+  echo: false
+  message: false
+  include: false
+editor: visual
+---
+
+```{r SET-UP R-SESSION}
+# These folders are user-specific
+data_folder <- "C:/Users/jdepestele/OneDrive - ILVO/000_data/biota/benthos_WKD6SCOPE/2026_WKBENTH4/"
+traits_folder <- "C:/Users/jdepestele/OneDrive - ILVO/000_data/biota/traits_benth/"
+if(all(dir.exists(paste0(data_folder,c("Type 1","Type2","Type3"))))){
+  cat("\n=> Locate data folders (Type 1, Type2, Type3) \nfrom the data call in data_folder !\n ")}
+if(!all(dir.exists(c(traits_folder)))){
+  cat("\n=> Locate all folders with traits information !\n ")}
+
+in_folder <- "./input"
+out_folder <- "./output"
+
+# Packages ----
+library(readxl)
+library(data.table)
+library(worrms)
+library(pbapply)
+library(tools)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+
+# Functions ----
+logit = function(p){log(p/(1-p))}
+
+f_coeflmod <- function(L1, L1_3, L3_10, L10){ # Estimate slope and intercept of cumulative binomial distribution functions of the relative biomass distribution across longevity classes
+  L_vct=c(L1, L1_3, L3_10, L10)
+  dat <- data.frame(Cumb=cumsum(L_vct[c(1:3)])/sum(L_vct),
+                    ll=c(log(1),log(3),log(10)))
+  suppressWarnings(mod1 <- glm(Cumb~ll, family = binomial, data = dat))
+  lintercept = as.numeric(coef(mod1)["(Intercept)"])
+  lslope = as.numeric(coef(mod1)["ll"])
+  return(c(lintercept=lintercept,
+           lslope=lslope))
+}
+f_predlong <- function(lintercept,lslope,prob=0.5){ # Predict the longevity for a relative cumulative biomass probabilitty
+  as.numeric(exp(logit(prob)-lintercept/lslope)) # prob=0.5 results in medlong
+}
+
+```
+
+```{r LOADING DATA}
+## LOAD DATA ####
+## Station data ----
+Stn_dt <- readRDS(paste0(out_folder, "/station_dt.RDS"))
+setnames(Stn_dt, c("station","replicates"),
+         c("station_name","replicate"))
+Stn_dt[, station_name := tolower(station_name)]
+Stn_dt[, .id := tolower(.id)]
+Stn_dt[, station_name := gsub("gotland","go",
+                              gsub(" ","",station_name))]
+Stn_dt[.id %in% tolower("NS_Hinderbanken_btrawling"), 
+       station_name := gsub("hi_","",station_name)]
+Stn_dt[.id %in% tolower("NS_SilverPit_btrawling"),year:=2003]
+
+
+## Biomass-at-longevity data ----
+B_dt <- readRDS(paste0(out_folder, "/biomass_long_dt.RDS"))
+B_dt[, station_name := tolower(station_name)]
+B_dt[, .id := tolower(.id)]
+B_dt[, replicate := as.character(replicate)]
+
+Lclasses <- c("L1", "L3", "L10", "L10plus")
+
+```
+
+```{r Biomass-at-longevity by station}
+## PRE-PROCESS longevity biomass data ####
+## Biomass-at-longevity-class per station ----
+# For each species: estimate its biomass per longevity class
+B_dt[, (Lclasses) := lapply(.SD, function(x) x * as.numeric(biomass_g_per_sqm)), .SDcols = Lclasses]
+# Summarize over species to estimate station-specific biomass-at-longevity-class
+B_dt <- B_dt[,
+             lapply(.SD, sum, na.rm=T),
+             by=.(.id, station_name, replicate, year, month),
+             .SDcols = Lclasses] # aphiaid is excluded to summarize across all species
+# selcols <- c(".id","station_name","replicate","year") # Year is required to identify unique samples
+# unique(B_dt[,..selcols])
+# nrow(B_dt[rowSums(B_dt[,..Lclasses])==0]) # 4 records
+B_dt <- B_dt[rowSums(B_dt[,..Lclasses])!=0] # The biomass in longevity classes cannot be zero
+if(all(rowSums(B_dt[,..Lclasses])==0)){"Check that the total biomass in any sample is not zero"}
+
+```
+
+```{r slope and intercept of binomial distribution function}
+## SLOPE AND INTERCEPT OF BINOMIAL DISTRIBUTION FUNCTION ####
+B_dt[,c("lintercept", "lslope") := 
+       transpose(.(do.call(f_coeflmod, setNames(.SD, names(Lclasses))))),
+     by=.(.id, station_name, replicate, year, month),
+     .SDcols = Lclasses]
+
+B_dt[,medlong := f_predlong(lintercept, lslope, prob=0.5)]
+B_dt[,Q90long := f_predlong(lintercept, lslope, prob=0.9)]
+B_dt[.id %in% "BoBIC_GulfofCadizsand_btrawling" & station_name == "arsa2015_4_"]$station_name <- "arsa2015_4"
+
+```
+
+# Biomass at longevity class
+The biological data of each taxon was matched with the longevity trait and its four trait modalities (L1, L3, L10 and L10plus). Each trait modalities were multiplied with the respective biomass ($g\,m^{-2}$) for each species, and summed by station to estimate the total longevity biomass. The relative cumulative biomass ($Cumb_{L}$) for the first three longevity classes $L$ was calculated as the ratio of the cumulative biomass of all longevity classes up to and including $L$ to the total biomass:
+$$
+Cumb_{L} = \frac{\sum_{L=1}^{i} B_L}{\sum_{L=1}^{4} B_L}, \quad i = 1,2,3
+$$
+and modeled with a cumulative binomial regression
+
+$$
+\text{logit}(Cumb_L) = \alpha + \beta \, ll_L
+$$
+where $ll_L = \log(L_{\text{upper},L})$, and $\alpha$ and $\beta$ are the intercept and slope, respectively, each individual sample station.
+
+\newpage
+
+```{r adding station info}
+## ADD STATION INFO (ONLY SAR INFORMATION !!) ####
+selcols <- c(".id", "station_name", "replicate", "year", "month", "gear_cat", "pressure_type", "pressure_value", "depth")
+Stn_dt <- Stn_dt[,..selcols]
+Stn_dt <- Stn_dt[ .id %in% unique(B_dt$.id)]
+Stn_dt[, station_name := tolower(station_name)]
+unique(Stn_dt$pressure_type)
+Stn_dt <- Stn_dt[pressure_type %in% c("SAR","trawl_index")]
+
+# => STATION NAMES DO NOT MATCH !!! => MANY NAs
+list(length(unique(Stn_dt[.id %in% B_dt$.id]$station_name)), 
+     length(unique(B_dt[.id %in% Stn_dt$.id]$station_name))) # More station_names in B_dt > Stn_dt (because of replicates)
+# list(sort(unique(Stn_dt[.id %in% B_dt$.id]$station_name)),
+#      sort(unique(B_dt[.id %in% Stn_dt$.id]$station_name)))
+
+B_dt[station_name %in% setdiff(B_dt$station_name, Stn_dt$station_name)]
+
+
+# There are no duplicates
+selcols <- c(".id","station_name","year","replicate")
+selcols <- c(".id","station_name","year","month","replicate")
+Stn_dt[,..selcols][duplicated(Stn_dt[,..selcols]) | duplicated(Stn_dt[,..selcols], fromLast=T)]
+B_dt[,..selcols][duplicated(B_dt[,..selcols]) | duplicated(B_dt[,..selcols], fromLast=T)]
+
+# Different station numbers using Stn_dt as base
+length(unique(Stn_dt$station_name)) # 380 unique station numbers
+length(intersect(Stn_dt$station_name, B_dt$station_name)) # 380 unique combinations
+setdiff(Stn_dt$station_name, B_dt$station_name) # All Stn_dt station_names are also in B_dt
+
+# Different station numbers using B_dt as base
+length(unique(B_dt$station_name)) # 381 unique station numbers
+length(intersect(B_dt$station_name, Stn_dt$station_name)) # 380 unique combinations
+setdiff(B_dt$station_name, Stn_dt$station_name) # => Two station_names in B_dt are not in Stn_dt
+
+# Exclude records
+B_dt <- B_dt[!station_name %in% setdiff(B_dt$station_name, Stn_dt$station_name)]
+
+# # Month is not given in most B_dt files, which is why the join fails:
+# setkey(Stn_dt, .id, station_name, year, replicate, month)
+# setkey(B_dt, .id, station_name, year, replicate, month)
+# B_dt[station_name =="go_3129"]
+# Stn_dt[station_name =="go_3129"]
+
+# WE CANNOT MATCH USING MONTH, BECAUSE MONTH IS NOT GIVEN IN B_dt RECORDS, EXCEPT FOR:
+month_available <- intersect(unique(B_dt[!is.na(month)]$.id), 
+                             unique(Stn_dt[!is.na(month)]$.id))
+month_available
+B_dt[.id %in% month_available, station_name := paste0(station_name,"_M",month)]
+Stn_dt[.id %in% month_available, station_name := paste0(station_name,"_M",month)]
+B_dt[, month:=NULL]
+Stn_dt[, month:=NULL]
+Stn_dt[, replicate:=NULL]
+
+setkey(Stn_dt, .id, station_name, year)
+setkey(B_dt, .id, station_name, year)
+B_dt <- Stn_dt[B_dt]
+
+unique(Stn_dt[B_dt][is.na(pressure_type)]$.id)
+B_dt[is.na(pressure_type) & .id %in% unique(B_dt[is.na(pressure_type)]$.id)[1]] # => Station info is only given for 2015
+B_dt[is.na(pressure_type) & .id %in% unique(B_dt[is.na(pressure_type)]$.id)[2]] # => Pressure type is O2 depletion, which was excluded from Stn_dt, but not from B_dt
+B_dt[is.na(pressure_type) & .id %in% unique(B_dt[is.na(pressure_type)]$.id)[3]] # => Station info for 2012 is missing
+
+B_dt <- B_dt[!is.na(pressure_type)] # EXCLUDE ALL MISSING RECORDS
+
+table(Stn_dt$.id, Stn_dt$gear_cat)
+trawl_id <- unique(Stn_dt[Stn_dt$gear_cat=="trawl"]$.id)
+grab_id <- unique(Stn_dt[Stn_dt$gear_cat=="grab"]$.id)
+intersect(trawl_id, grab_id) # No overlap!
+
+B_dt[, gear_cat := ifelse(.id %in% trawl_id, "trawl",
+                          ifelse(.id %in% grab_id, "grab", NA))]
+
+
+```
+
+# Explore longevity distributions
+## Matching station-specific longevity distribution with station info
+Station information for pressure type *SAR* was added to the biological datatable which has slope and intercept of each sampling station, as well as longevity estimates at Q50 (median longevity) and Q90 (90% quantile). Station info was matched using the Excel filename, year and month when available in both the station and biological data worksheet. Note that station numbers did not provide and exact match for *NS_SilverPit_btrawling* because of the different years. Both were manually set to 2003. The *NS_Hinderbank_btrawling* stations did not match, because one dataset has *hi_* while the other did not. The Gotland station numbers were re-named to *GO* to be consistent between the station and biological data worksheet. Stations were excluded for *bobic_gulfofcadizsand_btrawling* except for 2015, for *bs_southernbaltic_oxygendepletion*, because the pressure type was 'oxygen depletion', and for *ns_hinderbanken_sandextr_and_btrawling* because the station info of 2012 was missing.
+
+
+```{r explore longevity distribution with SAR}
+## EXPLORE longevity biomass data ####
+
+ll <- c(log(1), log(3), log(10))
+x  <- seq(min(ll), max(log(25)), length.out = 200)
+
+Bcdf_dt <- B_dt[, {
+  data.table(
+    longevity = exp(x),
+    Cumb = plogis(lintercept + lslope * x)
+  )
+}, by = .(.id, station_name, year, replicate, gear_cat, pressure_value)]
+Bcdf_dt[, sample_id := paste(.id, station_name, year, replicate, sep="_%_")]
+Bcdf_dt[,.id := factor(.id, levels=c(trawl_id, grab_id))]
+Bcdf_dt[,gear_cat := factor(gear_cat, levels=c("trawl", "grab"))]
+breaks <- c(0, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, Inf)
+labels <- c("≤0.01", "0.01–0.05", "0.05–0.1", "0.1–0.5",
+            "0.5–1", "1–2", "2–5", "5–10", ">10")
+Bcdf_dt[, pressure_bin := cut(pressure_value,
+                              breaks = breaks, labels = labels,
+                              include.lowest = TRUE, right = TRUE)]
+
+Bsmpl_dt <- B_dt[, {
+  data.table(
+    longevity = exp(ll),
+    Cumb = cumsum(c(L1, L3, L10))/sum(c(L1, L3, L10, L10plus))
+  )
+}, by = .(.id, station_name, replicate, year, gear_cat, pressure_value)]
+Bsmpl_dt[, sample_id := paste(.id, station_name, replicate, year, sep="_%_")]
+Bsmpl_dt[,.id := factor(.id, levels=c(trawl_id, grab_id))]
+Bsmpl_dt[,gear_cat := factor(gear_cat, levels=c("trawl", "grab"))]
+
+ggplot() +
+  geom_line(data = Bcdf_dt,
+            aes(x = longevity, y = Cumb,
+                group = sample_id, color = pressure_bin, linetype=gear_cat),
+            alpha=0.5, linewidth=1
+            ) + # , col="grey50"
+  # geom_point(data=Bsmpl_dt, aes(x = longevity, y = Cumb,
+  #                               group = sample_id, color = pressure_value)) + # , col="grey25"
+  facet_wrap(gear_cat~.id, ncol=4) + 
+  labs(x = "Longevity", y = "Cumulative biomass probability", color = "SAR") +
+  theme_bw() +
+  scale_color_brewer(palette = "RdYlBu", drop = FALSE, direction=-1) +
+  scale_linetype_manual(values = c("grab"  = "solid",
+                                   "trawl" = "dashed"))
+
+ggplot2::ggsave("./output/BiomassDistribution.png", unit="cm",width=30,height=20)
+
+```
+
+## Cumulative biomass distribution
+
+The cumulative biomass distribution at longevity was explored for 3 trawl and 12 grab studies (@fig-CumbExpl). The fishing intensity (SAR or trawl index) differed between and within studies. Stations with low fishing intensities are expected to have a higher biomass at higher longevities (blue curves shifting to the right of the graph), while highly fished stations are except to be shifted towards lower longevities (red curves shifting to the left). Some patterns are performing as expected, such as the *bs_gotland_btrawling*, while others are not, e.g. *bobic_gulfofcadizsand_btrawling*. These patterns should **NOT** be interpreted bluntly with their fishing intensities only, as environmental drivers may also contribute to the observed patterns, but these were unaccounted for.
+
+![Cumulative biomass distribution at longevity for each input dataset and sampling gears. Colors are indicative of the level of trawling disturbance, SAR except for the NS Silverpit study which used a trawling index.](./output/BiomassDistribution.png){#fig-CumbExpl fig-pos="H"}
