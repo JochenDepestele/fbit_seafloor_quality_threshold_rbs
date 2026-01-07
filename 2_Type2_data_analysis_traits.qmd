@@ -67,6 +67,10 @@ f_predlong <- function(lintercept,lslope,prob=0.5){
   as.numeric(exp(logit(prob)-lintercept/lslope)) # prob=0.5 results in medlong
 }
 
+f_biom_above_long <- function(longevity=3, lintercept, lslope){ 
+  1-plogis(lintercept + lslope * log(longevity))
+}
+
 ```
 
 ```{r LOADING DATA}
@@ -125,6 +129,12 @@ B_dt[,c("lintercept", "lslope") :=
 
 B_dt[,medlong := f_predlong(lintercept, lslope, prob=0.5)]
 B_dt[,Q90long := f_predlong(lintercept, lslope, prob=0.9)]
+B_dt[,biom_long1yrs := f_biom_above_long(1,lintercept, lslope)]
+B_dt[,biom_long2yrs := f_biom_above_long(2,lintercept, lslope)]
+B_dt[,biom_long3yrs := f_biom_above_long(3,lintercept, lslope)]
+B_dt[,biom_long5yrs := f_biom_above_long(5,lintercept, lslope)]
+B_dt[,biom_long8yrs := f_biom_above_long(5,lintercept, lslope)]
+B_dt[,biom_long10yrs := f_biom_above_long(10,lintercept, lslope)]
 B_dt[.id %in% "BoBIC_GulfofCadizsand_btrawling" & 
        station_name == "arsa2015_4_"]$station_name <- "arsa2015_4"
 
@@ -215,6 +225,61 @@ intersect(trawl_id, grab_id) # No overlap!
 
 B_dt[, gear_cat := ifelse(.id %in% trawl_id, "trawl",
                           ifelse(.id %in% grab_id, "grab", NA))]
+
+toplot <- B_dt[,
+               lapply(.SD, function(x)median(x, na.rm=T)),
+               by=.(.id, gear_cat, pressure_type, SARcat = ifelse(pressure_type=="SAR" & pressure_value <=0.5, "ref(<0.5)",
+                                                   ifelse(pressure_type=="SAR" & pressure_value <=1, "lowSAR(0.5-2)",
+                                                          ifelse(pressure_type=="SAR" & pressure_value <=5,"mediumSAR(2-5)",
+                                                                 ifelse(pressure_type=="SAR" & pressure_value >5,
+                                                                        "highSAR",
+                                                                        ifelse(pressure_type=="trawl_index" & pressure_value <=5, "ref(<0.5)",
+                                                                               ifelse(pressure_type=="trawl_index" & pressure_value <=20, "lowSAR(0.5-2)",
+                                                                                      ifelse(pressure_type=="trawl_index" & pressure_value <=50,"mediumSAR(2-5)",
+                                                                                             ifelse(pressure_type=="trawl_index" & pressure_value >50,
+                                                                                                    "highSAR", NA))))))))),
+               .SDcols=c("Q90long", "medlong","biom_long5yrs","biom_long8yrs","biom_long10yrs")]
+# dcast(toplot, .id + gear_cat~SARcat, value.var = "Q90long")
+ggplot(toplot, aes(x=factor(SARcat, levels=c("ref(<0.5)", "lowSAR(0.5-2)","mediumSAR(2-5)","highSAR",NA)), 
+                   y=biom_long8yrs, group=.id)) +
+  geom_smooth(formula = y~x, se=F, method="loess", col="gold2") +
+  geom_point() +
+  geom_smooth(formula = y~x, se=F, method="lm", col="firebrick4") +
+  facet_wrap(pressure_type~.id, scales="free_y") +
+  labs(title="MEDIAN Biomass of long-lived species over CATEGORIZED trawling gradient \nBiomass fraction with longevity > 8 years",
+       caption = "ns_silverpit_btrawling was estimated over a trawling index not SAR. Trawling index is categorized in <5, 5-20, 20-50, 50-100)",
+       x="SAR categories",y="Biomass fraction for longevities > 8 years") +
+  lims(y=c(0,1)) +
+  theme_bw() + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+ggplot(B_dt[pressure_type %in% c("SAR", "trawl_index") & Q90long<300], aes(x=pressure_value, 
+                                       y=Q90long, group=.id)) +
+  geom_smooth(formula = y~s(x, k=5), se=F, method="gam", col="gold2") +
+  geom_point() +
+  geom_smooth(formula = y~x, se=F, method="lm", col="firebrick4") +
+  facet_wrap(gear_cat~.id, scales="free") +
+  labs(title="LONGEVITY of 10% longest-lived species over trawling gradient") +
+  theme_bw()
+
+ggplot(B_dt[pressure_type %in% c("SAR", "trawl_index")], aes(x=pressure_value,
+                                       y=1-biom_long3yrs, group=.id)) +
+  geom_smooth(formula = y~s(x, k=5), se=F, method="gam", col="gold2") +
+  geom_point() +
+  geom_smooth(formula = y~x, se=F, method="lm", col="firebrick4") +
+  facet_wrap(gear_cat~.id, scales="free_x") +
+  lims(y=c(0,1))+
+  labs(title="Biomass of short-lived species over trawling gradient \nBiomass fraction with longevity < 3 years") +
+  theme_bw()
+
+ggplot(B_dt[pressure_type %in% c("SAR", "trawl_index")], aes(x=pressure_value,
+                                       y=biom_long8yrs, group=.id)) +
+  geom_smooth(formula = y~s(x, k=5), se=F, method="gam", col="gold2") +
+  geom_point() +
+  geom_smooth(formula = y~x, se=F, method="lm", col="firebrick4") +
+  facet_wrap(gear_cat~.id, scales="free_x") +
+  lims(y=c(0,1))+
+  labs(title="Biomass of long-lived species over trawling gradient \nBiomass fraction with longevity > 8 years") +
+  theme_bw()
 
 
 ```
