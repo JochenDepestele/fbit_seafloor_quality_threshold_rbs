@@ -272,7 +272,7 @@ ggplot(B_dt[pressure_type %in% c("SAR", "trawl_index") & !.id %in% sel_id_multi_
        aes(x=pressure_value, y=rel_biom_long8yrs, group=.id)) +
   geom_smooth(formula = y~s(x, k=5), se=F, method="gam", col="gold2") +
   geom_point(aes(shape=factor(ref))) +
-  geom_smooth(formula = y~x, se=F, method="lm", col="firebrick4") +
+  geom_smooth(formula = y~x, se=T, method="lm", col="firebrick4") +
   geom_hline(yintercept = 1, linetype=2, col="grey30") +
   facet_wrap(gear_cat~.id, scales="free") +
   scale_shape_manual(values = c(16, 1)) +
