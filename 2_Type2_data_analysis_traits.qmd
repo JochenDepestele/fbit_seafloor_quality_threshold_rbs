@@ -226,10 +226,37 @@ intersect(trawl_id, grab_id) # No overlap!
 B_dt[, gear_cat := ifelse(.id %in% trawl_id, "trawl",
                           ifelse(.id %in% grab_id, "grab", NA))]
 
-
 table(B_dt$.id,B_dt$pressure_type)
 
 sel_id_multi_pres <- B_dt[,length(unique(pressure_type)),by=(.id)][V1>1]$.id
+
+B_dt[,
+     .(quantile(pressure_value, 0.1), quantile(pressure_value, 0.15), quantile(pressure_value, 0.2), quantile(pressure_value, 0.25)),
+     by=.(.id, pressure_type)]
+B_dt[,
+     .(quantile(pressure_value, 0.1), quantile(pressure_value, 0.15), quantile(pressure_value, 0.2), quantile(pressure_value, 0.25)),
+     by=.(pressure_type)]
+B_dt[!(.id %in% sel_id_multi_pres),
+     .(quantile(pressure_value, 0.1), quantile(pressure_value, 0.15), quantile(pressure_value, 0.2), quantile(pressure_value, 0.25)),
+     by=.(pressure_type)]
+# ref: SAR=1; trawl_index=5; O2_depl=4; Sand extraction=0
+B_dt <- data.table(pressure_type=c("SAR","trawl_index","O2_depl", "Sand extraction"),
+                   ref_thr = c(1,5,4,0))[B_dt, on="pressure_type"]
+B_dt[, ref := pressure_value <= ref_thr]
+
+table(B_dt$.id, B_dt$ref)
+
+B_dt[.id %in% c("bobic_gulfofcadizmud_btrawling") & pressure_value < 7]$ref <- T
+B_dt[.id %in% c("ns_bfn_grab_btrawling","ns_bfn_beam_btrawling") & pressure_value < 3]$ref <- T
+
+table(B_dt$.id, B_dt$ref)
+
+B_dt[, mean_biom_long8yrs_ref :=
+       mean(biom_long8yrs[ref == TRUE], na.rm = TRUE),
+     by = .(.id, pressure_type)]
+table(B_dt$.id, B_dt$ref, B_dt$pressure_type)
+
+B_dt[,rel_biom_long8yrs := biom_long8yrs / mean_biom_long8yrs_ref]
 
 ggplot(B_dt[pressure_type %in% c("SAR", "trawl_index") & !.id %in% sel_id_multi_pres], 
        aes(x=pressure_value, y=biom_long8yrs, group=.id)) +
@@ -241,6 +268,19 @@ ggplot(B_dt[pressure_type %in% c("SAR", "trawl_index") & !.id %in% sel_id_multi_
   labs(title="Biomass of long-lived species over trawling gradient \nBiomass fraction with longevity > 8 years") +
   theme_bw()
 
+ggplot(B_dt[pressure_type %in% c("SAR", "trawl_index") & !.id %in% sel_id_multi_pres], 
+       aes(x=pressure_value, y=rel_biom_long8yrs, group=.id)) +
+  geom_smooth(formula = y~s(x, k=5), se=F, method="gam", col="gold2") +
+  geom_point(aes(shape=factor(ref))) +
+  geom_smooth(formula = y~x, se=F, method="lm", col="firebrick4") +
+  geom_hline(yintercept = 1, linetype=2, col="grey30") +
+  facet_wrap(gear_cat~.id, scales="free") +
+  scale_shape_manual(values = c(16, 1)) +
+  labs(title="Ratio of biomass of long-lived species over trawling gradient (closed dots) relative to the reference sites (open dots) \nBiomass fraction with longevity > 8 years",
+       caption = "Reference sites have SAR <= 1, except BOBIC-MUD where SAR < 7 and ns_bfn where SAR < 3") +
+  theme_bw() +
+  theme(legend.position = "none")
+
 ggplot(B_dt[pressure_type %in% c("O2_depl")], aes(x=pressure_value,
                                        y=biom_long8yrs, group=.id)) +
   geom_smooth(formula = y~s(x, k=5), se=F, method="gam", col="gold2") +
@@ -249,6 +289,17 @@ ggplot(B_dt[pressure_type %in% c("O2_depl")], aes(x=pressure_value,
   facet_wrap(gear_cat~.id, scales="free_x") +
   lims(y=c(0,1))+
   labs(title="Biomass of long-lived species over gradient of oxygen depletion \nBiomass fraction with longevity > 8 years") +
+  theme_bw()
+
+ggplot(B_dt[pressure_type %in% c("O2_depl")], 
+       aes(x=pressure_value, y=rel_biom_long8yrs, group=.id)) +
+  geom_smooth(formula = y~s(x, k=5), se=F, method="gam", col="gold2") +
+  geom_point(aes(shape=factor(ref))) +
+  geom_smooth(formula = y~x, se=F, method="lm", col="firebrick4") +
+  geom_hline(yintercept = 1, linetype=2, col="grey30") +
+  facet_wrap(gear_cat~.id, scales="free") +
+  scale_shape_manual(values = c(16, 1)) +
+  labs(title="Biomass of long-lived species over trawling gradient \nBiomass fraction with longevity > 8 years") +
   theme_bw()
 
 toplot <- dcast(B_dt[.id %in% sel_id_multi_pres],
