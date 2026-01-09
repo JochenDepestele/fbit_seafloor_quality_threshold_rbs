@@ -295,7 +295,7 @@ ggplot(B_dt[pressure_type %in% c("O2_depl")],
        aes(x=pressure_value, y=rel_biom_long8yrs, group=.id)) +
   geom_smooth(formula = y~s(x, k=5), se=F, method="gam", col="gold2") +
   geom_point(aes(shape=factor(ref))) +
-  geom_smooth(formula = y~x, se=F, method="lm", col="firebrick4") +
+  geom_smooth(formula = y~x, se=T, method="lm", col="firebrick4") +
   geom_hline(yintercept = 1, linetype=2, col="grey30") +
   facet_wrap(gear_cat~.id, scales="free") +
   scale_shape_manual(values = c(16, 1)) +
@@ -308,7 +308,7 @@ ggplot(toplot,
        aes(x=SAR, y=biom_long8yrs, group=.id, col=log(`Sand extraction`+0.0001))) +
   geom_smooth(formula = y~s(x, k=5), se=F, method="gam", col="gold2") +
   geom_point() +
-  geom_smooth(formula = y~x, se=F, method="lm", col="firebrick4") +
+  geom_smooth(formula = y~x, se=T, method="lm", col="firebrick4") +
   facet_wrap(.id~gear_cat, scales="free_x",ncol=1) +
   lims(y=c(0,1)) + 
   scale_color_gradientn(colors = rev(RColorBrewer::brewer.pal(11, "RdYlBu"))) +
