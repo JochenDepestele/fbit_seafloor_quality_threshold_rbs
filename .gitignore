@@ -14,3 +14,7 @@
 
 # Ignore PDFs
 *.pdf
+
+# subsequent folders are not synced
+/input/
+/output/
