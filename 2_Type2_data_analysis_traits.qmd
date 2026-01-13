@@ -223,7 +223,7 @@ sel_id_multi_pres <- B_dt[,length(unique(pressure_type)),by=(.id)][V1>1]$.id
 
 ## Matching station-specific longevity distribution with station info
 
-Station information for pressure type *SAR* was added to the biological datatable which has slope and intercept of each sampling station, as well as longevity estimates at Q50 (median longevity) and Q90 (90% quantile). Station info was matched using the Excel filename, year and month when available in both the station and biological data worksheet. Note that station numbers did not provide and exact match for *NS_SilverPit_btrawling* because of the different years. Both were manually set to 2003. The *NS_Hinderbank_btrawling* stations did not match, because one dataset has *hi\_* while the other did not. The Gotland station numbers were re-named to *GO* to be consistent between the station and biological data worksheet. Stations were excluded for *bobic_gulfofcadizsand_btrawling* except for 2015, for *bs_southernbaltic_oxygendepletion*, because the pressure type was 'oxygen depletion', and for *ns_hinderbanken_sandextr_and_btrawling* because the station info of 2012 was missing.
+Station information for pressure type *SAR* was added to the biological datatable which has slope and intercept of each sampling station. Station info was matched using the Excel filename, year and month when available in both the station and biological data worksheet. Note that station numbers did not provide and exact match for *NS_SilverPit_btrawling* because of the different years. Both were manually set to 2003. The *NS_Hinderbank_btrawling* stations did not match, because one dataset has *hi\_* while the other did not. The Gotland station numbers were re-named to *GO* to be consistent between the station and biological data worksheet. Stations were excluded for *bobic_gulfofcadizsand_btrawling* except for 2015, for *bs_southernbaltic_oxygendepletion*, because the pressure type was 'oxygen depletion', and for *ns_hinderbanken_sandextr_and_btrawling* because the station info of 2012 was missing.
 
 ```{r explore longevity distribution with SAR, echo=F,include=F}
 ## EXPLORE longevity biomass data ####
@@ -392,7 +392,7 @@ to_table1
 
 Low-disturbance samples were identified for each dataset using the 15 % quantiles of the pressure values (@fig-refpres_Q15). The cumulative biomass distribution curves were estimated by dataset for the low-disturbance samples only. `r length(B_ref[(pressure_type=="SAR" & refpres_Q15<=1)]$.id)` datasets had low-disturbance samples with SAR-values below or equal to one ($SAR \leq1$), while the following `r length(B_ref[(pressure_type=="SAR" & refpres_Q15>1)]$.id)` datasets (`r paste(B_ref[(pressure_type=="SAR" & refpres_Q15>1)]$.id, collapse=", ")`) had high *reference* SAR-values: `r paste(B_ref[(pressure_type=="SAR" & refpres_Q15>1)]$refpres_Q15, collapse=", ")`. A cumulative biomass distribution function was fitted through the low-disturbance samples from which the longevity of the top 10 % biomass was estimated (@tbl-table_Qpres).
 
-![Cumulative biomass distribution at longevity for each input dataset and sampling gears. Colors are indicative of the level of trawling disturbance, SAR except for the NS Silverpit study which used a trawling index.](./output/dist_pressure_vals_unique_pres.png){#fig-refpres_Q15 fig-pos="H"}
+![Histograms of the pressure values by dataset with one pressure. All datasets used SAR except for the NS Silverpit study which used a trawling index and bs_southernbaltic which represents oxygen concentrations .](./output/dist_pressure_vals_unique_pres.png){#fig-refpres_Q15 fig-pos="H"}
 
 ```{r reference longevities, include=T}
 #| label: tbl-table_Qpres
@@ -454,7 +454,7 @@ B_dt <- thr_dt[B_dt, on=".id"]
 
 
 # Fit GLM per group and get predicted values + CI
-B_pred <- B_dt[pressure_type %in% c("SAR", "trawl_index") & !(.id %in% sel_id_multi_pres),
+B_pred <- B_dt[pressure_type %in% c("SAR", "trawl_index", "O2_depl") & !(.id %in% sel_id_multi_pres),
                {
                  # Fit GLM on logit scale
                  m <- glm(log(rel_biom_Ksens+1e-6) ~ 0 + pressure_value, family = gaussian)
@@ -538,6 +538,7 @@ to_table2[pval>=0.05,
           c("SAR_at_THR_lower", "SAR_at_THR_pred", "SAR_at_THR_upper") := NA]
 to_table2 <- to_table2[order(pval) ,..selcols]
 to_table2 <- thr_dt[to_table2, on=".id"]
+to_table2 <- to_table2[! pressure_type %in% c("O2_depl"),]
 to_table2
 
 # ---------------------------------------------------
@@ -565,12 +566,12 @@ B_pred2 <- B_pred2 %>%
 # ---------------------------------------------------
 # Step 4: Plot
 # ---------------------------------------------------
-ggplot(B_pred2[((pressure_type=="SAR" & pressure_value < ceiling(max_pres)+0.5) | 
-                (pressure_type=="trawl_index"))], 
+ggplot(B_pred2[((pressure_type %in% c("SAR") & pressure_value < ceiling(max_pres)+0.5) | # ,"O2_depl"
+                (pressure_type %in% c("trawl_index")))], 
        aes(x = pressure_value, y = y_pred, group = .id)) +
   geom_ribbon(aes(ymin = y_lower, ymax = y_upper), fill = "firebrick4", alpha = 0.2) +
-  geom_line(color = "firebrick4", size = 1) +
-  geom_point(data = B_dt[pressure_type %in% c("SAR", "trawl_index") & 
+  geom_line(color = "firebrick4", linewidth = 1) +
+  geom_point(data = B_dt[pressure_type %in% c("SAR", "trawl_index","O2_depl") & 
                          !(.id %in% sel_id_multi_pres)],
              aes(x = pressure_value, y = rel_biom_Ksens, shape = factor(ref)),
              color = "grey25") +
@@ -597,7 +598,7 @@ SAR-levels associated with case-specific threshold on longlived biomass were est
 
 ```{r, include=T}
 #| label: tbl-PresStat_SAR
-#| tbl-cap: 'Slopes of pressure-state curves with associated pressures levels using longlived biomass thresholds'
+#| tbl-cap: 'Slopes of pressure-state curves and pressures/SAR thresholds inferred from longlived biomass thresholds (current thresholds are random, but they should come from Type-1 data)'
 #| tbl-pos: H
 
 # build header vector
