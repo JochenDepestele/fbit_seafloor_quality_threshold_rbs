@@ -15,6 +15,10 @@
 # Ignore PDFs
 *.pdf
 
+# Ignore OLD files (case-insensitive)
+*[Oo][Ll][Dd]*
+
+
 # subsequent folders are not synced
 /input/
 /output/
