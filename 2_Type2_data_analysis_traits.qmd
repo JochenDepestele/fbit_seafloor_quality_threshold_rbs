@@ -571,7 +571,7 @@ ggplot(B_pred2[((pressure_type %in% c("SAR") & pressure_value < ceiling(max_pres
        aes(x = pressure_value, y = y_pred, group = .id)) +
   geom_ribbon(aes(ymin = y_lower, ymax = y_upper), fill = "firebrick4", alpha = 0.2) +
   geom_line(color = "firebrick4", linewidth = 1) +
-  geom_point(data = B_dt[pressure_type %in% c("SAR", "trawl_index","O2_depl") & 
+  geom_point(data = B_dt[pressure_type %in% c("SAR", "trawl_index") & # ,"O2_depl"
                          !(.id %in% sel_id_multi_pres)],
              aes(x = pressure_value, y = rel_biom_Ksens, shape = factor(ref)),
              color = "grey25") +
