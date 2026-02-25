@@ -235,6 +235,108 @@ sel_id_multi_pres <- B_dt[,length(unique(pressure_type)),by=(.id)][V1>1]$.id
 
 ```
 
+
+```{r concept longlived biomass}
+# --- Parameters ---
+beta0 <- -6
+beta1 <- 3.5
+
+# Age sequence for curves
+longevity <- seq(0.01, 12, length.out = 400)
+
+# Logit-log model
+eta <- beta0 + beta1 * log(longevity)
+cum_biomass <- 1 / (1 + exp(-eta))
+biomass_at_longevity <- beta1 * cum_biomass * (1 - cum_biomass) / (longevity + 1)
+
+# Data frame for curves
+plot_data <- data.frame(
+  age = longevity,
+  cumulative = cum_biomass,
+  biomass = biomass_at_longevity
+)
+
+# --- Top 10% tail ---
+age_threshold <- quantile(plot_data$age, 0.9)
+top_tail <- plot_data$age >= age_threshold
+
+# --- Rescale secondary axis so that biomass max aligns with 0.75 on primary axis ---
+scale_factor <- 0.75 / max(biomass_at_longevity)
+
+# --- Simulate ~10 points around mean for selected ages ---
+set.seed(42)  # reproducibility
+
+age_classes <- c(1, 3, 10)
+mean_cum <- c(0.0025, 0.104, 0.887)
+mean_bio <- c(0.00436, 0.0815, 0.0318)
+
+sim_data <- data.frame()
+
+for(i in seq_along(age_classes)){
+  n <- 10
+  age_val <- age_classes[i]
+  
+  cum_vals <- rnorm(n, mean_cum[i], sd = 0.005)  # small variation around mean
+  bio_vals <- rnorm(n, mean_bio[i], sd = 0.005)
+  
+  temp <- data.frame(
+    age = rep(age_val, n),
+    cumulative = cum_vals,
+    biomass = bio_vals
+  )
+  
+  sim_data <- rbind(sim_data, temp)
+}
+
+# --- Plot with curves, shaded top 10%, and simulated points ---
+ggplot(plot_data, aes(x = age)) +
+  # Cumulative biomass curve
+  geom_line(aes(y = cumulative), color = "skyblue3", linewidth = 1.3) +
+  # Biomass curve (scaled)
+  # Shaded top 10% biomass area
+  geom_ribbon(data = plot_data[top_tail, ],
+              aes(ymin = 0, ymax = biomass * scale_factor),
+              fill = "orange", alpha = 0.5) +
+  geom_line(aes(y = biomass * scale_factor), color = "darkgreen", linewidth = 1.3) +
+  geom_vline(xintercept = age_threshold, color="orange", linewidth=1.5) +
+  # Simulated data points (jittered slightly for visibility)
+  geom_point(data = sim_data, 
+             aes(y = cumulative), 
+             color = "skyblue3", 
+             position = position_jitter(width = 0.2, height = 0.005), 
+             size = 2) +
+  geom_point(data = sim_data, 
+             aes(y = biomass * scale_factor), 
+             color = "darkgreen", 
+             position = position_jitter(width = 0.2, height = 0.002), 
+             size = 2) +
+  scale_x_continuous(breaks = c(1,3,10)) +
+  scale_y_continuous(
+    name = "Cumulative biomass proportion",
+    limits = c(0, 1),
+    sec.axis = sec_axis(~ . / scale_factor, name = "Biomass proportion")
+  ) +
+  labs(
+    x = "Longevity (years)",
+    # title = "Biomass distribution over longevity classes",
+    # subtitle = "Long-lived biomass (orange) represents the 10 % biomass of the oldest longevity classes",
+    # caption = "Rijnsdorp et al. (2018)"
+  ) +
+  theme_minimal()+
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(color="grey80")
+  )
+
+ggplot2::ggsave("./output/longlivedbiomass_concept.png", unit="cm",width=20,height=15)
+
+```
+
+The longevity class of each species is estimated using biological traits' databases. The total biomass is estimated by longevity class, from which a cumulative biomass distribution function is estimated. The conceptual representation of the cumulative and proportional biomass distribution is shown in @fig-concept_LLB. The top 10 % biomass of the longest living organisms results in an estimate of the longevity class. When the longevity estimate of the top 10 % biomass is estimated from low-disturbance samples, this longevity class can be used as a boundary value to estimate the indicator *longlived biomass* for disturbed samples. The long-lived biomass is conceptually aligned with RBSsens, being the biomass of the 10% most sensitive fauna in the benthic community relative to its carrying capacity. 
+
+![Concept of long-lived biomass indicator. The distribution of cumulative (blue) and proportional (green) biomass over longevity classes is shown. The top 10 % of the longest living biomass is delineated in orange.](./output/longlivedbiomass_concept.png){#fig-concept_LLB fig-pos="H" height=40%}
+
+
 # Explore longevity distributions
 
 ## Matching station-specific longevity distribution with station info
