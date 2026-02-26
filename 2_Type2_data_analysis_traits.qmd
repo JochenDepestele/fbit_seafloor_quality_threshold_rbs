@@ -825,6 +825,35 @@ ggplot2::ggsave("./output/pressure_state_fishing.png", unit="cm",width=30,height
 if(tosave)save(B_dt, B_pred, B_pred2, file = "./output/Biomass_inoutput_model.Rdata")
 
 
+ggplot(B_pred2[((pressure_type %in% c("SAR") & pressure_value < ceiling(max_pres)+0.5) | # ,"O2_depl"
+                (pressure_type %in% c("trawl_index")))], 
+       aes(x = pressure_value, y = y_pred, group = .id)) +
+  # geom_ribbon(aes(ymin = y_lower, ymax = y_upper), fill = "#1F5AA6", alpha = 0.2) +
+  # geom_line(color = "#1F5AA6", linewidth = 1) +
+  geom_point(data = B_dt[pressure_type %in% c("SAR", "trawl_index") & # ,"O2_depl"
+                         !(.id %in% sel_id_multi_pres)],
+             aes(x = pressure_value, y = rel_biom_Ksens, shape = factor(ref)),
+             color = "grey33") +
+  geom_hline(yintercept = 1, linetype=2, col="grey33") +
+  # geom_hline(data=toplot_table2, aes(yintercept = SEL_THR),
+  #            col="#B44A3A") +
+  # geom_rect(data = toplot_table2, 
+  #           aes(xmin = SAR_at_THR_lower, xmax = SAR_at_THR_upper, ymin = -Inf, ymax = Inf),
+  #           fill = "grey75", alpha = 0.25, inherit.aes = FALSE) +
+  # geom_vline(data = toplot_table2, aes(xintercept = SAR_at_THR_pred), col="grey75") +
+  facet_wrap(gear_cat ~ .id, scales = "free") +
+  scale_shape_manual(values = c(16, 1)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(title = "Log-normal Regression with 95% CI",
+       y = "Ratio of long-lived biomass fraction in sample \nto mean over reference samples",
+       x = "SAR (except ns_silverpit_btrawling: trawling index)")
+
+ggplot2::ggsave("./output/pressure_state_datapoints.png", unit="cm",width=30,height=20)
+# ggplot2::ggsave("./output/pressure_state_loglinear.png", unit="cm",width=30,height=20)
+# ggplot2::ggsave("./output/pressure_state_loglinear_indthr.png", unit="cm",width=30,height=20)
+
+
 ```
 
 The sample-based long-lived biomass was estimated using the sampled-based cumulative biomass distributions (@fig-CumbExpl) and the longevities of the top 10 % long-lived biomass estimated for low-disturbance samples (@tbl-table_Qpres). The sample-based long-lived biomass fractions were divided by the mean long-lived biomass fraction of the low-disturbed samples to enable comparisons across datasets, and used as response variable for the pressure-state relationships.
